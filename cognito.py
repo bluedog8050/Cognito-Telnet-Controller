@@ -1,31 +1,55 @@
 import logging
 import telnetlib
+import time
 
 log = logging.getLogger(__name__)
 
 class TelnetController:
-    def __init__(self, ip, port):
-        self.ip = ip
+    def __init__(self, host, port):
+        self.host = host
         self.port = port
-        self.link = telnetlib.Telnet(ip, port)
-        if self.link:
-            log.info(f'Connected via telnet to {ip}:{port}')
-        else:
-            log.error(f'Failed to connect to {ip}:{port}')
+        self.connect(host, port)
+
+    def connect(self, host, port):
+        try:
+            self.link = telnetlib.Telnet(host, port)
+        except:
+            log.error('Unable to connect to the host', exc_info = 1)
+            return
+        self.host = host
+        self.port = port
+        self.check()
+
+        self.noprompt()
+        self.noecho()
 
     def _send(self, msg):
+        msg += '\r\n'
+        bytestring = msg.encode('utf-8')
         try:
-            self.link.write(msg + '\r\n')
+            self.link.write(bytestring)
         except OSError:
             log.error('Command not sent: telnet connection is not available!', exc_info = 1)
+        
+        self.check()
 
     def check(self):
+        time.sleep(0.2)
+        b_message = b''
         try:
-            queue = str(self.link.read_lazy())
-            if queue != "b''":
-                print(queue)
+            queue = self.link.read_eager()
+            while queue != b'':
+                b_message += queue
+                queue = self.link.read_eager()
+                time.sleep(0.1)
+        except EOFError as e:
+            b_message += b'\r\n<CONNECTION CLOSED>'
         except Exception as e:
             print(e)
+
+        message = b_message.decode('utf-8')
+
+        print(message)
 
     # noecho
     def noecho(self):
@@ -36,12 +60,20 @@ class TelnetController:
         self._send('noprompt')
     
     # API.AttributeFade(fixture[,attribute_name],value [,time])
-    def attribute_fade(self, fixture, value, *, attribute=None, time=None):
-        args = filter(None, [fixture, attribute, value, time])
+    def attribute_fade(self, fixture, value, attribute=None, time=None):
+        if attribute:
+            attribute = f"'{attribute}'"
+        if time:
+            time = str(time)
+        args = filter(None, [str(fixture), attribute, str(value), time])
         self._send(f'API.AttributeFade({", ".join(args)})')
     
     # API.AttributeFadeCapture(fixture[,attribute_name],value [,time])
-    def attribute_fade_capture(self, fixture, value, *, attribute=None, time=None):
+    def attribute_fade_capture(self, fixture, value, attribute=None, time=None):
+        if attribute:
+            attribute = f"'{attribute}'"
+        if time:
+            time = str(time)
         args = filter(None, [fixture, attribute, value, time])
         self._send(f'API.AttributeFadeCapture({", ".join(args)})')
     
